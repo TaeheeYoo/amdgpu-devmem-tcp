@@ -17,7 +17,7 @@ CXX=$(HIPCC)
 
 
 $(EXECUTABLE): $(OBJECTS) 
-	$(HIPCC) -L /opt/rocm/lib $(OBJECTS) -o $@ -lhsa-runtime64
+	$(HIPCC) -L /opt/rocm/lib -I /opt/rocm/include $(OBJECTS) -o $@ -lhsa-runtime64
 
 
 test: $(EXECUTABLE)

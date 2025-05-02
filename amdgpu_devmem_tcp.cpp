@@ -25,11 +25,11 @@
 #include <stdio.h>
 #include <iostream>
 #include <unistd.h>
-#include <hsa/hsa.h>
+#include "hsa/hsa.h"
 #include "hip/hip_runtime.h"
-#include "/opt/rocm-6.2.0/include/hsa/hsa_ext_finalize.h"
-#include "/opt/rocm-6.2.0/include/hsa/hsa_ext_image.h"
-#include "/opt/rocm-6.2.0/include/hsa/hsa_ext_amd.h"
+#include "hsa/hsa_ext_finalize.h"
+#include "hsa/hsa_ext_image.h"
+#include "hsa/hsa_ext_amd.h"
 
 #ifdef NDEBUG
 #define HIP_ASSERT(x) x
