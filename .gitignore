@@ -1,2 +1,3 @@
-amdgpu_devmem_tcp
+hip_devmem_tcp
 *.o
+*.a

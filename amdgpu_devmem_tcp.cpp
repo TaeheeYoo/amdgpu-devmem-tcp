@@ -19,17 +19,7 @@
    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
    THE SOFTWARE.
  */
-#include <assert.h>
-#include <algorithm>
-#include <stdlib.h>
-#include <stdio.h>
-#include <iostream>
-#include <unistd.h>
-#include "hsa/hsa.h"
-#include "hip/hip_runtime.h"
-#include "hsa/hsa_ext_finalize.h"
-#include "hsa/hsa_ext_image.h"
-#include "hsa/hsa_ext_amd.h"
+#include "amdgpu_devmem_tcp.h"
 
 #ifdef NDEBUG
 #define HIP_ASSERT(x) x
@@ -75,7 +65,7 @@ __kernel__ void vectoradd_float(float* a, const float* b, const float* c, int wi
 #endif
 
 using namespace std;
-int main()
+int do_backend()
 {
 	int dmabuf_fd = -1;
 	hsa_status_t err;
