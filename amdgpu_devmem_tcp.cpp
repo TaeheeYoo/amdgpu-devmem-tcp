@@ -19,7 +19,14 @@
    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
    THE SOFTWARE.
  */
+
 #include "amdgpu_devmem_tcp.h"
+#include <iostream>
+#include "hsa/hsa.h"
+#include "hip/hip_runtime.h"
+#include "hsa/hsa_ext_finalize.h"
+#include "hsa/hsa_ext_image.h"
+#include "hsa/hsa_ext_amd.h"
 
 #ifdef NDEBUG
 #define HIP_ASSERT(x) x
@@ -27,124 +34,87 @@
 #define HIP_ASSERT(x) (assert((x)==hipSuccess))
 #endif
 
-#define WIDTH     1024
-#define HEIGHT    1024
-
-#define NUM       (WIDTH*HEIGHT)
-
-#define THREADS_PER_BLOCK_X  16
-#define THREADS_PER_BLOCK_Y  16
-#define THREADS_PER_BLOCK_Z  1
-
 __global__ void 
-vectoradd_float(float* __restrict__ a, const float* __restrict__ b,
-		const float* __restrict__ c, int width, int height) 
+validation_kern(unsigned char* __restrict__ src, int len, unsigned char seed)
 
 {
-	int x = hipBlockDim_x * hipBlockIdx_x + hipThreadIdx_x;
-	int y = hipBlockDim_y * hipBlockIdx_y + hipThreadIdx_y;
-
-	int i = y * width + x;
-	if ( i < (width * height)) {
-		a[i] = b[i] + c[i];
-	}
-}
-
 #if 0
-__kernel__ void vectoradd_float(float* a, const float* b, const float* c, int width, int height) {
+	int x = hipBlockDim_x * hipBlockIdx_x + hipThreadIdx_x;
 
-
-	int x = blockDimX * blockIdx.x + threadIdx.x;
-	int y = blockDimY * blockIdy.y + threadIdx.y;
-
-	int i = y * width + x;
-	if ( i < (width * height)) {
-		a[i] = b[i] + c[i];
-	}
-}
+	src[x] = 0xff;
+#else
+	int i;
+	
+	for (i = 0; i < len; i++)
+		src[i] = 0xff;
 #endif
+}
 
 using namespace std;
-int do_backend()
+int init_hip(struct ctx *ctx)
 {
+	unsigned char* devmem, *hostmem;
 	int dmabuf_fd = -1;
 	hsa_status_t err;
 	uint64_t offset;
-	float* deviceA;
-	float* deviceB;
-	float* deviceC;
-	float* hostA;
-	float* hostB;
-	float* hostC;
-	int errors;
+	int errors = 0;
 	int i;
 
+	if (!ctx || !ctx->size) {
+		printf("[TEST]%s %u ctx or size is not defined\n", __func__, __LINE__);
+		return -1;
+	}
 	hipDeviceProp_t devProp;
 	hipGetDeviceProperties(&devProp, 0);
 	cout << " System minor " << devProp.minor << endl;
 	cout << " System major " << devProp.major << endl;
 	cout << " agent prop name " << devProp.name << endl;
-
-
-
 	cout << "hip Device prop succeeded " << endl ;
 
-	hostA = (float*)malloc(NUM * sizeof(float));
-	hostB = (float*)malloc(NUM * sizeof(float));
-	hostC = (float*)malloc(NUM * sizeof(float));
-
-	// initialize the input data
-	for (i = 0; i < NUM; i++) {
-		hostB[i] = (float)i;
-		hostC[i] = (float)i*100.0f;
+	HIP_ASSERT(hipMalloc((void**)&devmem, ctx->size));
+	hostmem = (unsigned char*)malloc(65536);
+	if (!hostmem) {
+		printf("[TEST]%s %u hostmem alloc failed\n", __func__, __LINE__);
+		return -1;
 	}
-
-	HIP_ASSERT(hipMalloc((void**)&deviceA, NUM * sizeof(float)));
-	HIP_ASSERT(hipMalloc((void**)&deviceB, NUM * sizeof(float)));
-	HIP_ASSERT(hipMalloc((void**)&deviceC, NUM * sizeof(float)));
-
-	HIP_ASSERT(hipMemcpy(deviceB, hostB, NUM*sizeof(float),
-			     hipMemcpyHostToDevice));
-	HIP_ASSERT(hipMemcpy(deviceC, hostC, NUM*sizeof(float),
-			     hipMemcpyHostToDevice));
-
-	hipLaunchKernelGGL(vectoradd_float, 
-			   dim3(WIDTH / THREADS_PER_BLOCK_X,
-				HEIGHT / THREADS_PER_BLOCK_Y),
-			   dim3(THREADS_PER_BLOCK_X, THREADS_PER_BLOCK_Y),
-			   0, 0,
-			   deviceA ,deviceB ,deviceC ,WIDTH ,HEIGHT);
-
-	err = hsa_amd_portable_export_dmabuf((void *)deviceA,
-					     NUM * sizeof(float),
+	ctx->device_memory = devmem;
+	ctx->host_memory = hostmem;
+	err = hsa_amd_portable_export_dmabuf((void *)devmem,
+					     ctx->size,
 					     &dmabuf_fd,
 					     &offset);
-	if (err != HSA_STATUS_SUCCESS)
+	if (err != HSA_STATUS_SUCCESS) {
 		fprintf(stderr, "dmabuf export failed!\n");
-	else
-		printf("dmabuf export succeeded!\n");
-
-	HIP_ASSERT(hipMemcpy(hostA, deviceA, NUM*sizeof(float),
-			     hipMemcpyDeviceToHost));
-	errors = 0;
-	for (i = 0; i < NUM; i++)
-		if (hostA[i] != (hostB[i] + hostC[i]))
-			errors++;
-
-	if (errors!=0)
-		printf("FAILED: %d errors\n",errors);
-	else
-		printf ("PASSED!\n");
-
-	HIP_ASSERT(hipFree(deviceA));
-	HIP_ASSERT(hipFree(deviceB));
-	HIP_ASSERT(hipFree(deviceC));
-
-	free(hostA);
-	free(hostB);
-	free(hostC);
-
-	//hipResetDefaultAccelerator();
+		errors = -1;
+	} else {
+		ctx->memfd = dmabuf_fd;
+		ctx->offset = offset;
+		printf("dmabuf export succeeded! fd = %d devmem %p offset = %lu \n", dmabuf_fd, devmem, offset);
+	}
 
 	return errors;
+}
+
+int dispatch_validation(struct ctx *ctx, unsigned long long offset, unsigned int len)
+{
+	unsigned char *devmem = ctx->device_memory + offset;
+	unsigned char *hostmem = ctx->host_memory;
+	hipError_t err;
+
+	hipMemcpy(hostmem, devmem, len, hipMemcpyDeviceToHost);
+	printf("[TEST] [%u] \n", hostmem[0]);
+	hipLaunchKernelGGL(validation_kern, 
+			   dim3(1),
+			   dim3(1),
+			   0, 0,
+			   devmem, len, 0);
+
+	err = hipDeviceSynchronize();
+	if (err != hipSuccess)
+		    fprintf(stderr, "Device sync failed: %s\n", hipGetErrorString(err));
+	hipMemcpy(hostmem, devmem, len, hipMemcpyDeviceToHost);
+
+	printf("[TEST] [%u] \n", hostmem[0]);
+
+	return 0;
 }
