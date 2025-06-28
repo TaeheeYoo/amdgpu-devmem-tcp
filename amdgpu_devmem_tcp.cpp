@@ -24,8 +24,6 @@
 #include <iostream>
 #include "hsa/hsa.h"
 #include "hip/hip_runtime.h"
-#include "hsa/hsa_ext_finalize.h"
-#include "hsa/hsa_ext_image.h"
 #include "hsa/hsa_ext_amd.h"
 
 #ifdef NDEBUG
@@ -38,16 +36,10 @@ __global__ void
 validation_kern(unsigned char* __restrict__ src, int len, unsigned char seed)
 
 {
-#if 0
-	int x = hipBlockDim_x * hipBlockIdx_x + hipThreadIdx_x;
-
-	src[x] = 0xff;
-#else
 	int i;
 	
 	for (i = 0; i < len; i++)
 		src[i] = 0xff;
-#endif
 }
 
 using namespace std;
