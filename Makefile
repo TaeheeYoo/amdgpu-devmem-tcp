@@ -1,47 +1,20 @@
-HIP_PATH?= $(wildcard /opt/rocm)
-HIPCC=$(HIP_PATH)/bin/hipcc
+HIPCC=hipcc
 
-EXECUTABLE=./hip_devmem_tcp
-
-.PHONY: test
-
-all: $(EXECUTABLE)
-
-CXXFLAGS =-g
+EXECUTABLE=hip_devmem_tcp
 
 CXX=$(HIPCC)
 
-$(EXECUTABLE):
-	$(HIPCC) -L /opt/rocm/lib \
-		-I /opt/rocm/include \
-		-I /usr/include amdgpu_devmem_tcp.cpp \
-		--emit-static-lib -fPIC \
-		-o libamdgpu_devmem_tcp.a \
-		-lhsa-runtime64 \
-		-D__HIP_PLATFORM_AMD__
-	$(HIPCC) -x c ncdevmem.c \
-		-o hip_ncdevmem \
-		-I. \
-		-I /usr/include \
-		-I /usr/src/`uname -r`/include \
-		-I /root/tools/net/ynl/generated \
-		-I /root/tools/net/ynl/lib \
-		-L. \
-		-L /root/tools/net/ynl/lib \
-		-L /root/tools/net/ynl \
-		-L /opt/rocm/lib \
-		-I /opt/rocm/include \
-		-lamdhip64 \
-		-lhsa-runtime64 \
-		-lamdgpu_devmem_tcp \
-		-lynl \
-		-D__HIP_PLATFORM_AMD__
+.PHONY: all
+all: $(EXECUTABLE)
 
-test: $(EXECUTABLE)
-	$(EXECUTABLE)
+$(EXECUTABLE): amdgpu_devmem_tcp.o ncdevmem.o
+	$(HIPCC) -o $@ $^ -no-pie -lhsa-runtime64 -lynl -lamdhip64
+
+amdgpu_devmem_tcp.o: amdgpu_devmem_tcp.cpp
+	$(HIPCC) -fPIC -o $@ -c $^ -D__HIP_PLATFORM_AMD__
+
+ncdevmem.o: ncdevmem.c
+	$(HIPCC) -o $@ -c $^
 
 clean:
-	rm -f $(EXECUTABLE)
-	rm -f $(OBJECTS)
-	rm -f ncdevmem
-	rm -rf libamdgpu_devmem_tcp.a
+	rm -f amdgpu_devmem_tcp.o ncdevmem.o $(EXECUTABLE)

@@ -1,6 +1,5 @@
-#include <assert.h>
-#include <stdlib.h>
-#include <unistd.h>
+#ifndef AMD_GPU_DEVMEM_TCP_H__
+#define AMD_GPU_DEVMEM_TCP_H__
 
 struct ctx {
 	unsigned char* device_memory;
@@ -19,3 +18,4 @@ int dispatch_validation(struct ctx *ctx, unsigned long long offset, unsigned int
 }
 #endif
 
+#endif

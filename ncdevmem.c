@@ -1,47 +1,21 @@
-// SPDX-License-Identifier: GPL-2.0
-/*
- * tcpdevmem netcat. Works similarly to netcat but does device memory TCP
- * instead of regular TCP. Uses udmabuf to mock a dmabuf provider.
- *
- * Usage:
- *
- *     On server:
- *     ncdevmem -s <server IP> [-c <client IP>] -f eth1 -l -p 5201
- *
- *     On client:
- *     echo -n "hello\nworld" | nc -s <server IP> 5201 -p 5201
- *
- * Test data validation:
- *
- *     On server:
- *     ncdevmem -s <server IP> [-c <client IP>] -f eth1 -l -p 5201 -v 7
- *
- *     On client:
- *     yes $(echo -e \\x01\\x02\\x03\\x04\\x05\\x06) | \
- *             tr \\n \\0 | \
- *             head -c 5G | \
- *             nc <server IP> 5201 -p 5201
- *
- *
- * Note this is compatible with regular netcat. i.e. the sender or receiver can
- * be replaced with regular netcat to test the RX or TX path in isolation.
- */
-#define _GNU_SOURCE
-#define __EXPORTED_HEADERS__
+#include "amdgpu_devmem_tcp.h"
 
-#include <linux/uio.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdbool.h>
 #include <string.h>
 #include <errno.h>
+#include <time.h>
+
 #define __iovec_defined
 #include <fcntl.h>
-#include <malloc.h>
+
 #include <error.h>
 
+#include <net/if.h>
 #include <arpa/inet.h>
+
 #include <sys/socket.h>
 #include <sys/mman.h>
 #include <sys/ioctl.h>
@@ -53,22 +27,14 @@
 #include <linux/netlink.h>
 #include <linux/genetlink.h>
 #include <linux/netdev.h>
-//#include <linux/ethtool_netlink.h>
-#include <time.h>
-#include <net/if.h>
+#include <linux/uio.h>
 
-#include "netdev-user.h"
-//#include "ethtool-user.h"
-#include "ynl.h"
-#include "amdgpu_devmem_tcp.h"
+#include <ynl/netdev-user.h>
+#include <ynl/ynl.h>
 
 #define PAGE_SHIFT 12
 #define TEST_PREFIX "ncdevmem"
 #define NUM_PAGES 16000
-
-#ifndef MSG_SOCK_DEVMEM
-#define MSG_SOCK_DEVMEM 0x2000000
-#endif
 
 static char *server_ip;
 static char *client_ip;
@@ -459,7 +425,7 @@ int do_server(struct memory_buffer *mem)
 	fprintf(stderr, "binding to address %s:%d\n", server_ip,
 		ntohs(server_sin.sin6_port));
 
-	ret = bind(socket_fd, &server_sin, sizeof(server_sin));
+	ret = bind(socket_fd, (struct sockaddr *) &server_sin, sizeof(server_sin));
 	if (ret)
 		error(1, errno, "%s: [FAIL, bind]\n", TEST_PREFIX);
 
@@ -473,7 +439,7 @@ int do_server(struct memory_buffer *mem)
 		  sizeof(buffer));
 	fprintf(stderr, "Waiting or connection on %s:%d\n", buffer,
 		ntohs(server_sin.sin6_port));
-	client_fd = accept(socket_fd, &client_addr, &client_addr_len);
+	client_fd = accept(socket_fd, (struct sockaddr *) &client_addr, &client_addr_len);
 
 	inet_ntop(AF_INET6, &client_addr.sin6_addr, buffer,
 		  sizeof(buffer));
