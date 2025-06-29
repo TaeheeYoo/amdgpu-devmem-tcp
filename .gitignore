@@ -1,5 +1,5 @@
-hip_devmem_tcp
-hip_ncdevmem
-ncdevmem
-*.o
-*.a
+output/
+makefile
+README.md
+
+compile_commands.json
