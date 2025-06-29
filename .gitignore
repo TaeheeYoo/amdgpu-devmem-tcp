@@ -1,4 +1,6 @@
 output/
+library/
+.cache/
 makefile
 README.md
 
