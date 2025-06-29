@@ -1,0 +1,1 @@
+Cruzer-S/amdgpu_memory_provider static amdgpu_memory_provider
